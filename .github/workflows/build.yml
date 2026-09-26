@@ -1,0 +1,83 @@
+name: Build
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    # only run on PRs targeting main
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch: [ '386', 'amd64' ]
+    container:
+      image: ghcr.io/hairyhenderson/gomplate-ci-build@sha256:54e6356b2b006a277f9eb700da0e723989b29520604604864caec2df323b25bf
+    steps:
+      - run: |
+          git config --global user.email "bogus@example.com"
+          git config --global user.name "Someone"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Cache Go build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/go-build
+          key: go-build-linux-${{ matrix.goarch }}-${{ hashFiles('go.sum') }}
+          restore-keys: go-build-linux-${{ matrix.goarch }}-
+      - run: make test GOARCH=${{ matrix.goarch }}
+  fscli-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [ linux-amd64, linux-arm-v7, linux-arm64, linux-ppc64le, darwin-amd64, darwin-arm64, windows-amd64.exe ]
+    container:
+      image: ghcr.io/hairyhenderson/gomplate-ci-build:latest@sha256:54e6356b2b006a277f9eb700da0e723989b29520604604864caec2df323b25bf
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - name: Cache Go build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/go-build
+          key: go-build-fscli-${{ matrix.platform }}-${{ hashFiles('go.sum') }}
+          restore-keys: go-build-fscli-${{ matrix.platform }}-
+      - name: Build fscli
+        run: |
+          make bin/fscli_${{ matrix.platform }}
+  windows-build:
+    runs-on: windows-latest
+    env:
+      TMP: D:\a\tmp
+    steps:
+      - run: pwd
+      - run: |
+          git config --global user.email "bogus@example.com"
+          git config --global user.name "Someone"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+      - run: make test
